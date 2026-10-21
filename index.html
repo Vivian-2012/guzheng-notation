@@ -184,7 +184,9 @@ const listEl=$('#list'), emptyEl=$('#empty'), countEl=$('#count');
 
 async function loadSongs(){
   try{
-    const r=await fetch(SB_URL+'/rest/v1/scores?select=*&order=title',{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+(token()||SB_KEY)}});
+    // 读曲库是公开操作，始终用 anon key，避免过期登录 token 导致 401
+    const r=await fetch(SB_URL+'/rest/v1/scores?select=*&order=title',{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}});
+    if(r.status===401){ setSession(null); applyAdminUI(); }
     if(!r.ok) throw new Error('HTTP '+r.status);
     const rows=await r.json();
     SONGS=rows.map(r=>({ id:r.id, title:r.title, tags:r.tags||[], files:r.files||[], kind:r.kind||(/(pdf)$/i.test((r.files||[])[0]||'')?'pdf':'image') }));
@@ -471,9 +473,26 @@ async function doUpload(){
   }
   $('#upSubmit').disabled=true; msg.className='msg'; msg.textContent='上传中…';
   try{
+    // 检查曲名是否与曲库已有曲子重复
+    const dupMap=new Map(); SONGS.forEach(s=>dupMap.set(s.title, s));
+    const dups=groups.filter(g=>dupMap.has(g.title));
+    let overwrite=false;
+    if(dups.length>0){
+      const names=dups.map(g=>'《'+g.title+'》').join('、');
+      overwrite=confirm('曲库里已存在 '+names+'。\n\n点「确定」覆盖（删除旧的再上传），点「取消」跳过这些曲子只传新的。');
+      if(!overwrite){
+        groups=groups.filter(g=>!dupMap.has(g.title));
+        if(groups.length===0){ msg.className='msg'; msg.textContent='没有需要上传的曲子（全部重复已跳过）'; $('#upSubmit').disabled=false; return; }
+      }
+    }
     let done=0;
     const stamp=Date.now();
     for(const g of groups){
+      // 覆盖：先删掉同名旧曲子
+      if(overwrite && dupMap.has(g.title)){
+        msg.textContent='替换《'+g.title+'》中…';
+        await removeSong(dupMap.get(g.title));
+      }
       const names=[];
       const slug=safeSlug(g.title);
       for(let i=0;i<g.files.length;i++){
@@ -491,6 +510,21 @@ async function doUpload(){
     setTimeout(()=>{ closeUpload(); loadSongs(); },800);
   }catch(e){ msg.className='msg err'; msg.textContent=e.message; }
   finally{ $('#upSubmit').disabled=false; }
+}
+
+/* 删除一首曲子的文件+记录（无确认，供覆盖上传与删除按钮复用）
+   返回删除的行数，用于判断是否真的删掉（RLS 下无权限会返回 0 行且 HTTP 200） */
+async function removeSong(song){
+  if(!token()) throw new Error('未登录或登录已过期，请重新登录');
+  for(const f of song.files){
+    await fetch(SB_URL+'/storage/v1/object/'+BUCKET+'/'+encodeURIComponent(f),{method:'DELETE',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+token()}});
+  }
+  const r=await fetch(SB_URL+'/rest/v1/scores?id=eq.'+song.id,{method:'DELETE',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+token(),'Prefer':'return=representation'}});
+  if(r.status===401){ setSession(null); applyAdminUI(); throw new Error('登录已过期，请重新登录后再删'); }
+  if(!r.ok){ throw new Error('删除失败：HTTP '+r.status); }
+  const deleted=await r.json();
+  if(!Array.isArray(deleted)||deleted.length===0){ throw new Error('没有权限删除（请重新登录）'); }
+  return deleted.length;
 }
 
 /* 根据文件名把文件分组成曲子：
@@ -544,15 +578,11 @@ function refreshPreview(){
     groups.map(g=>'· <b>'+escapeHtml(g.title)+'</b>（'+(g.kind==='pdf'?'PDF 多页':g.files.length+' 页')+'）').join('<br>');
 }
 async function deleteSong(song){
-  if(!isAdmin()) return;
-  if(!confirm('删除《'+song.title+'》？文件也会从存储删除。')) return;
-  try{
-    for(const f of song.files){
-      await fetch(SB_URL+'/storage/v1/object/'+BUCKET+'/'+encodeURIComponent(f),{method:'DELETE',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+token()}});
-    }
-    await fetch(SB_URL+'/rest/v1/scores?id=eq.'+song.id,{method:'DELETE',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+token()}});
-    loadSongs();
-  }catch(e){ alert('删除失败：'+e.message); }
+  if(!isAdmin()){ alert('请先登录'); return; }
+  const info=(song.files&&song.files[0])?('\n文件：'+song.files[0]):'';
+  if(!confirm('删除《'+song.title+'》？文件也会从存储删除。'+info)) return;
+  try{ await removeSong(song); loadSongs(); }
+  catch(e){ alert('删除失败：'+e.message); }
 }
 
 /* ---------- Modal 开关 ---------- */
