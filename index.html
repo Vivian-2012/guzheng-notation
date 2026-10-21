@@ -39,22 +39,11 @@
   .rhead .title{font-size:16px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .rhead button{background:#3b3a36;color:#f3eee5;border:none;border-radius:10px;padding:8px 12px;font-size:14px;cursor:pointer}
   .rhead button:hover{background:#4a4843}
-  .rstage{position:relative;flex:1;overflow:auto;padding:16px;perspective:2000px}
+  .rstage{position:relative;flex:1;overflow:auto;padding:16px}
   .rcontent{display:flex;align-items:flex-start;justify-content:center;min-height:100%}
   .rstage img,.rstage canvas{max-width:100%;height:auto;background:#fff;border-radius:4px;box-shadow:0 6px 24px rgba(0,0,0,.4)}
-  /* 翻书：掀起的那一页覆盖层 */
-  .flipper{position:absolute;z-index:6;transform-style:preserve-3d;pointer-events:none;will-change:transform}
-  .flipper .face{position:absolute;inset:0;backface-visibility:hidden;overflow:hidden;border-radius:4px;box-shadow:0 6px 24px rgba(0,0,0,.4);background:#fff}
-  .flipper .face img{width:100%;height:100%;display:block;border-radius:4px;box-shadow:none}
-  .flipper .shade{position:absolute;inset:0;border-radius:4px;background:rgba(0,0,0,0);transition:background .5s}
-  /* 翻下一页：绕右边缘向左掀 */
-  .flipper.next{transform-origin:right center}
-  .flipper.next.go{animation:flipNext .6s ease-in forwards}
-  @keyframes flipNext{from{transform:rotateY(0deg)}to{transform:rotateY(-170deg)}}
-  /* 翻上一页：绕左边缘向右掀 */
-  .flipper.prev{transform-origin:left center}
-  .flipper.prev.go{animation:flipPrev .6s ease-in forwards}
-  @keyframes flipPrev{from{transform:rotateY(0deg)}to{transform:rotateY(170deg)}}
+  /* 卷页动画用的覆盖 canvas */
+  #flipCanvas{position:absolute;z-index:6;pointer-events:none;border-radius:4px}
   /* 左右点击翻页区（覆盖在舞台上方，固定在视口） */
   .tap{position:fixed;top:56px;bottom:0;width:38%;z-index:3;cursor:pointer;-webkit-tap-highlight-color:transparent}
   .tap-l{left:0}
@@ -235,6 +224,7 @@ function closeReader(){ $('#reader').classList.remove('on'); document.body.style
 function showImgPage(){
   $('#rContent').innerHTML='';
   const img=document.createElement('img');
+  img.crossOrigin='anonymous';   // 允许卷页动画把图片画到 canvas
   img.src=pubUrl(R.song.files[R.page-1]); img.alt=R.song.title+' 第'+R.page+'页';
   $('#rContent').appendChild(img); updateNav();
 }
@@ -266,44 +256,156 @@ function updateNav(){
   hintTimer=setTimeout(()=>{ hint.style.opacity='0'; },1400);
 }
 
-/* 捕获当前页的位图 dataURL + 在舞台内的位置尺寸，用于翻书覆盖层 */
+/* 把当前页元素（img/canvas）画成一张 Image + 记录它在舞台内的位置尺寸 */
 function snapshotCurrent(){
   const el=$('#rContent').firstElementChild;
   if(!el || (el.tagName!=='IMG' && el.tagName!=='CANVAS')) return null;
   const stage=$('#rStage');
   const er=el.getBoundingClientRect(), sr=stage.getBoundingClientRect();
-  let src;
-  try{
-    if(el.tagName==='CANVAS') src=el.toDataURL('image/png');
-    else src=el.src;
-  }catch(e){ src=el.src||null; }
-  if(!src) return null;
-  return { src, left:er.left-sr.left+stage.scrollLeft, top:er.top-sr.top+stage.scrollTop, width:er.width, height:er.height };
+  return {
+    el,
+    left:er.left-sr.left+stage.scrollLeft,
+    top:er.top-sr.top+stage.scrollTop,
+    width:er.width, height:er.height
+  };
 }
 
-/* 翻书动画：d>0 下一页(向左掀)，d<0 上一页(向右掀) */
+/* page-curl 卷页：d>0 下一页。右下角卷起，沿对角线慢慢往左上翻过去 */
 let flipping=false;
 async function flipTo(d){
   const np=R.page+d;
   if(np<1||np>R.total||flipping) return;
-  const snap=snapshotCurrent();  // 旧页快照
-  R.page=np; $('#rStage').scrollTop=0;
+  const snap=snapshotCurrent();
+  // 先拿到旧页位图（在替换前）
+  let oldImg=null;
+  if(snap){
+    oldImg=document.createElement('canvas');
+    oldImg.width=Math.max(1,Math.round(snap.width));
+    oldImg.height=Math.max(1,Math.round(snap.height));
+    try{ oldImg.getContext('2d').drawImage(snap.el,0,0,oldImg.width,oldImg.height); }
+    catch(e){ oldImg=null; }
+  }
   // 渲染新页到底层
+  R.page=np; $('#rStage').scrollTop=0;
   if(R.mode==='img') showImgPage(); else await renderPdfPage();
-  if(!snap){ return; }           // 无快照则直接切换，不做动画
+  if(!oldImg){ return; }
+  // 仅对"下一页"做右下角卷起；上一页做反向（左上→右下回卷）
   flipping=true;
-  const flip=document.createElement('div');
-  flip.className='flipper '+(d>0?'next':'prev');
-  flip.style.left=snap.left+'px'; flip.style.top=snap.top+'px';
-  flip.style.width=snap.width+'px'; flip.style.height=snap.height+'px';
-  flip.innerHTML='<div class="face"><img src="'+snap.src+'"></div><div class="shade"></div>';
-  $('#rStage').appendChild(flip);
-  // 阴影：翻动过半时变暗，模拟纸张背面受光
-  const shade=flip.querySelector('.shade');
-  requestAnimationFrame(()=>{ flip.classList.add('go'); setTimeout(()=>{ shade.style.background='rgba(0,0,0,.35)'; },260); });
-  flip.addEventListener('animationend',()=>{ flip.remove(); flipping=false; },{once:true});
-  // 兜底移除
-  setTimeout(()=>{ if(flip.parentNode){ flip.remove(); flipping=false; } },800);
+  await runCurl(oldImg, snap, d>0);
+  flipping=false;
+}
+
+/* 用覆盖 canvas 逐帧绘制卷页。forward=true 右下角卷起往左上翻 */
+function runCurl(pageCanvas, snap, forward){
+  return new Promise(resolve=>{
+    const stage=$('#rStage');
+    const W=pageCanvas.width, H=pageCanvas.height;
+    const cv=document.createElement('canvas');
+    cv.id='flipCanvas';
+    cv.width=W; cv.height=H;
+    cv.style.left=snap.left+'px';
+    cv.style.top=snap.top+'px';
+    cv.style.width=snap.width+'px';
+    cv.style.height=snap.height+'px';
+    stage.appendChild(cv);
+    const ctx=cv.getContext('2d');
+    const dur=900, start=performance.now();
+    function frame(now){
+      let t=(now-start)/dur; if(t>1)t=1;
+      // ease-in-out
+      const e=t<.5 ? 2*t*t : 1-Math.pow(-2*t+2,2)/2;
+      const p=forward? e : (1-e);
+      drawCurl(ctx,pageCanvas,W,H,p);
+      if(t<1) requestAnimationFrame(frame);
+      else { cv.remove(); resolve(); }
+    }
+    requestAnimationFrame(frame);
+  });
+}
+
+/* 绘制进度 p(0..1) 的卷页帧。
+   卷起线从右下角(p=0)沿对角线推进到左上(p=1)。
+   - 卷起线左上侧：旧页平铺（还没翻到的部分）
+   - 右下侧：这部分纸已被掀起并绕卷起线翻折（镜像+外移），显示纸背(带阴影)
+   - 底层露出的新页已经画在 rContent 里，这里只画旧页的残留与翻折片 */
+function drawCurl(ctx,img,W,H,p){
+  ctx.clearRect(0,0,W,H);
+  const diag=Math.hypot(W,H);
+  // 卷起线参考点：从右下角(W,H)沿对角线(指向左上)前进 p*diag
+  const ux=-W/diag, uy=-H/diag;       // 对角线方向(右下→左上)，也是卷折的法线
+  const d=p*diag;
+  const cx=W+ux*d, cy=H+uy*d;
+  const tx=-uy, ty=ux;                 // 卷起线方向(垂直法线)
+
+  // 1) 左上侧旧页平铺
+  ctx.save();
+  clipHalf(ctx,W,H,cx,cy,ux,uy,+1);
+  ctx.clip();
+  ctx.drawImage(img,0,0,W,H);
+  // 卷起线边缘的投影(落在还没翻的旧页上)
+  const shLen=Math.min(60, d*0.4+8);
+  const sg=ctx.createLinearGradient(cx,cy,cx+ux*shLen,cy+uy*shLen);
+  sg.addColorStop(0,'rgba(0,0,0,.30)');
+  sg.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=sg; ctx.fillRect(0,0,W,H);
+  ctx.restore();
+
+  // 2) 翻折片：右下侧的旧页，绕卷起线镜像翻到左上(模拟掀起的纸背)
+  const curl=Math.min(W,H)*0.5*Math.sin(Math.PI*Math.min(1,p*1.1));
+  drawFoldFlap(ctx,img,W,H,cx,cy,ux,uy,tx,ty,curl);
+}
+
+/* 画翻折起来的纸片(旧页右下侧镜像到左上，带纸背阴影与边缘高光) */
+function drawFoldFlap(ctx,img,W,H,cx,cy,ux,uy,tx,ty,curl){
+  ctx.save();
+  // 裁剪：卷起线左上侧(翻折片落点) 且在页面外扩区域
+  clipHalf(ctx,W,H,cx,cy,ux,uy,+1);
+  ctx.clip();
+  // 镜像矩阵：关于过(cx,cy)、方向(tx,ty)的直线做反射
+  // 反射公式：对方向 t 的直线反射 = 绕法线取反
+  // M = T(c) * Reflect_t * T(-c)
+  const a=tx*tx-uy*uy*0; // 用标准反射矩阵
+  // 标准：关于单位方向(tx,ty)的直线反射矩阵
+  const m00=tx*tx-ty*ty, m01=2*tx*ty, m10=2*tx*ty, m11=ty*ty-tx*tx;
+  // 额外沿法线外移 curl，让翻起的纸离开底面一点
+  const offx=ux*curl*0.15, offy=uy*curl*0.15;
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.translate(cx+offx,cy+offy);
+  ctx.transform(m00,m10,m01,m11,0,0);
+  ctx.translate(-cx,-cy);
+  ctx.globalAlpha=1;
+  ctx.drawImage(img,0,0,W,H);
+  // 纸背整体压暗 + 顺着卷曲的渐变明暗
+  const gx=cx, gy=cy;
+  const gg=ctx.createLinearGradient(gx,gy,gx-ux*curl,gy-uy*curl);
+  gg.addColorStop(0,'rgba(60,50,40,.05)');
+  gg.addColorStop(.5,'rgba(40,32,25,.28)');
+  gg.addColorStop(1,'rgba(20,16,12,.5)');
+  ctx.fillStyle=gg; ctx.fillRect(0,0,W,H);
+  ctx.restore();
+  // 翻折边缘高光(贴着卷起线)
+  ctx.save();
+  clipHalf(ctx,W,H,cx,cy,ux,uy,+1);
+  ctx.clip();
+  const hg=ctx.createLinearGradient(cx,cy,cx+ux*6,cy+uy*6);
+  hg.addColorStop(0,'rgba(255,255,255,.5)');
+  hg.addColorStop(1,'rgba(255,255,255,0)');
+  ctx.fillStyle=hg; ctx.fillRect(0,0,W,H);
+  ctx.restore();
+}
+
+/* 裁剪出卷起线某一侧（sign=+1 取 u 正方向侧=左上未翻侧） */
+function clipHalf(ctx,W,H,cx,cy,ux,uy,sign){
+  // 线方向(垂直于u)：tx,ty
+  const tx=-uy, ty=ux;
+  const big=Math.hypot(W,H)*3;
+  const px=cx+tx*big, py=cy+ty*big;
+  const qx=cx-tx*big, qy=cy-ty*big;
+  const ox=ux*big*sign, oy=uy*big*sign;
+  ctx.beginPath();
+  ctx.moveTo(px,py); ctx.lineTo(qx,qy);
+  ctx.lineTo(qx+ox,qy+oy); ctx.lineTo(px+ox,py+oy);
+  ctx.closePath();
 }
 function go(d){ flipTo(d); }
 
