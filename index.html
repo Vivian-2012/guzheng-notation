@@ -49,7 +49,9 @@
   .tap-l{left:0}
   .tap-r{right:0}
   .pagehint{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:4;background:rgba(0,0,0,.55);color:#f3eee5;font-size:14px;padding:6px 16px;border-radius:20px;pointer-events:none;transition:opacity .4s;opacity:1}
-  .loading{color:#f3eee5;padding:40px;font-size:15px}
+  .loading{color:#f3eee5;padding:40px;font-size:15px;text-align:center}
+  .progwrap{width:200px;max-width:60vw;height:6px;background:rgba(255,255,255,.18);border-radius:4px;margin:14px auto 0;overflow:hidden}
+  .progbar{height:100%;width:0;background:var(--accent);border-radius:4px;transition:width .15s}
   /* overlay/modal */
   .overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;align-items:flex-start;justify-content:center;padding:24px;z-index:60;overflow:auto}
   .overlay.on{display:flex}
@@ -243,24 +245,62 @@ function toggleFullscreen(){
   else enterFullscreen();
 }
 function openReader(song){
-  R.song=song; R.page=1; R.pdf=null;
+  R.song=song; R.page=1; R.pdf=null; R.cache={}; R.loadId=0;
   $('#rTitle').textContent=song.title;
   $('#reader').classList.add('on'); document.body.style.overflow='hidden';
   enterFullscreen();
   if(song.kind==='pdf'){ R.mode='pdf'; loadPdf(pubUrl(song.files[0])); }
   else { R.mode='img'; R.total=song.files.length; showImgPage(); }
 }
-function closeReader(){ exitFullscreen(); $('#reader').classList.remove('on'); document.body.style.overflow=''; $('#rContent').innerHTML='<div class="loading">加载中…</div>'; R.pdf=null; }
-function showImgPage(){
+function closeReader(){ exitFullscreen(); $('#reader').classList.remove('on'); document.body.style.overflow=''; $('#rContent').innerHTML='<div class="loading">加载中…</div>';
+  if(R.cache){ Object.values(R.cache).forEach(u=>{ try{ URL.revokeObjectURL(u); }catch(e){} }); }
+  R.pdf=null; R.cache={};
+}
+
+/* 带进度地把图片 URL 取成 objectURL（并缓存），失败时回退到直接用原 URL */
+async function fetchImg(fileName, onProg){
+  if(R.cache[fileName]) return R.cache[fileName];
+  const url=pubUrl(fileName);
+  try{
+    const resp=await fetch(url);
+    if(!resp.ok) throw new Error('HTTP '+resp.status);
+    const total=+(resp.headers.get('Content-Length')||0);
+    if(resp.body && total){
+      const reader=resp.body.getReader(); let recv=0; const chunks=[];
+      while(true){ const {done,value}=await reader.read(); if(done) break; chunks.push(value); recv+=value.length; if(onProg) onProg(recv/total); }
+      const blob=new Blob(chunks);
+      const obj=URL.createObjectURL(blob); R.cache[fileName]=obj; return obj;
+    }else{
+      const blob=await resp.blob(); const obj=URL.createObjectURL(blob); R.cache[fileName]=obj; return obj;
+    }
+  }catch(e){ return url; } // CORS/网络问题则退回原 URL（无进度）
+}
+function preloadNextImg(){
+  if(R.mode!=='img') return;
+  const nx=R.page; // 下一页索引(0基)= 当前page(1基)
+  const f=R.song.files[nx];
+  if(f && !R.cache[f]) fetchImg(f, null); // 后台静默预取
+}
+async function showImgPage(){
+  const myId=++R.loadId;
+  const fileName=R.song.files[R.page-1];
+  $('#rContent').innerHTML='<div class="loading">加载中…<div class="progwrap"><div class="progbar" id="rProg"></div></div></div>';
+  const src=await fetchImg(fileName, frac=>{ const b=$('#rProg'); if(b) b.style.width=Math.round(frac*100)+'%'; });
+  if(myId!==R.loadId) return; // 期间翻了别页，丢弃
   $('#rContent').innerHTML='';
   const img=document.createElement('img');
-  img.crossOrigin='anonymous';   // 允许卷页动画把图片画到 canvas
-  img.src=pubUrl(R.song.files[R.page-1]); img.alt=R.song.title+' 第'+R.page+'页';
+  img.crossOrigin='anonymous';
+  img.src=src; img.alt=R.song.title+' 第'+R.page+'页';
   $('#rContent').appendChild(img); updateNav();
+  preloadNextImg();
 }
 async function loadPdf(url){
-  $('#rContent').innerHTML='<div class="loading">加载 PDF 中…</div>';
-  try{ R.pdf=await pdfjsLib.getDocument(url).promise; R.total=R.pdf.numPages; R.page=1; renderPdfPage(); }
+  $('#rContent').innerHTML='<div class="loading">加载 PDF 中…<div class="progwrap"><div class="progbar" id="rProg"></div></div></div>';
+  try{
+    const task=pdfjsLib.getDocument(url);
+    task.onProgress=(p)=>{ if(p&&p.total){ const b=$('#rProg'); if(b) b.style.width=Math.round(p.loaded/p.total*100)+'%'; } };
+    R.pdf=await task.promise; R.total=R.pdf.numPages; R.page=1; renderPdfPage();
+  }
   catch(e){ $('#rContent').innerHTML='<div class="loading">PDF 加载失败：'+escapeHtml(e.message)+'</div>'; }
 }
 async function renderPdfPage(){
@@ -317,7 +357,7 @@ async function flipTo(d){
   }
   // 渲染新页到底层
   R.page=np; $('#rStage').scrollTop=0;
-  if(R.mode==='img') showImgPage(); else await renderPdfPage();
+  if(R.mode==='img') await showImgPage(); else await renderPdfPage();
   if(!oldImg){ return; }
   // 仅对"下一页"做右下角卷起；上一页做反向（左上→右下回卷）
   flipping=true;
@@ -652,6 +692,13 @@ window.addEventListener('resize', ()=>{ if($('#reader').classList.contains('on')
 /* ---------- 启动 ---------- */
 applyAdminUI();
 loadSongs();
+
+/* 注册 Service Worker：缓存谱子文件，下次秒开/可离线 */
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  });
+}
 </script>
 </body>
 </html>
