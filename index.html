@@ -115,9 +115,10 @@
 <div class="overlay" id="uploadOverlay">
   <div class="modal">
     <h2>上传谱子</h2>
-    <div class="field"><label>曲名</label><input type="text" id="upTitle" placeholder="如：女人花"></div>
-    <div class="field"><label>标签（逗号分隔，可留空）</label><input type="text" id="upTags" placeholder="古风, 抒情"></div>
-    <div class="field"><label>谱子文件（PDF 或图片，可多选=多页）</label><input type="file" id="upFiles" accept=".pdf,.jpg,.jpeg,.png" multiple></div>
+    <div class="field"><label>谱子文件（PDF 或图片，可多选；同名不同数字=同一首的多页）</label><input type="file" id="upFiles" accept=".pdf,.jpg,.jpeg,.png" multiple></div>
+    <div class="field"><label>标签（逗号分隔，可留空；应用于本次所有曲子）</label><input type="text" id="upTags" placeholder="古风, 抒情"></div>
+    <div class="field" id="upRenameWrap" style="display:none"><label>曲名（仅识别到 1 首时可改，留空用文件名）</label><input type="text" id="upTitle" placeholder="留空则用文件名自动识别"></div>
+    <div id="upPreview" style="font-size:13px;color:var(--muted);background:#faf7f1;border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:12px;display:none"></div>
     <div id="upMsg" class="msg"></div>
     <div class="modal-actions">
       <button class="btn ghost" id="upCancel">取消</button>
@@ -257,28 +258,90 @@ async function insertSong(title,tags,files,kind){
   if(!r.ok){ const t=await r.text(); throw new Error('写入曲库失败：'+t); }
 }
 async function doUpload(){
-  const title=$('#upTitle').value.trim();
-  const tags=$('#upTags').value.split(',').map(s=>s.trim()).filter(Boolean);
   const files=[...$('#upFiles').files];
+  const tags=$('#upTags').value.split(',').map(s=>s.trim()).filter(Boolean);
   const msg=$('#upMsg'); msg.className='msg';
-  if(!title){ msg.className='msg err'; msg.textContent='请填曲名'; return; }
   if(files.length===0){ msg.className='msg err'; msg.textContent='请选择文件'; return; }
-  const pdfCount=files.filter(f=>/\.pdf$/i.test(f.name)).length;
-  if(pdfCount>0 && files.length>1){ msg.className='msg err'; msg.textContent='PDF 请单独一个文件上传；多页请用多张图片'; return; }
-  const kind=pdfCount>0?'pdf':'image';
+  let groups;
+  try{ groups=groupFiles(files); }
+  catch(e){ msg.className='msg err'; msg.textContent=e.message; return; }
+  // 识别到 1 首时允许用输入框覆盖曲名
+  if(groups.length===1){
+    const t=$('#upTitle').value.trim();
+    if(t) groups[0].title=t;
+  }
   $('#upSubmit').disabled=true; msg.className='msg'; msg.textContent='上传中…';
   try{
-    const names=[];
-    for(let i=0;i<files.length;i++){
-      const ext=files[i].name.split('.').pop();
-      const dest=kind==='pdf'?(title+'.'+ext):(title+(files.length>1?(i+1):'')+'.'+ext);
-      await uploadOne(files[i],dest); names.push(dest);
+    let done=0;
+    for(const g of groups){
+      const names=[];
+      for(let i=0;i<g.files.length;i++){
+        const f=g.files[i];
+        const ext=f.name.split('.').pop();
+        // 存储文件名：曲名 + 页码(多页时) + 扩展名，避免不同曲子重名
+        const dest=g.kind==='pdf'
+          ? (g.title+'.'+ext)
+          : (g.title+(g.files.length>1?(i+1):'')+'.'+ext);
+        await uploadOne(f,dest); names.push(dest);
+      }
+      await insertSong(g.title,tags,names,g.kind);
+      done++;
+      msg.textContent='上传中… ('+done+'/'+groups.length+')';
     }
-    await insertSong(title,tags,names,kind);
-    msg.className='msg ok'; msg.textContent='上传成功！';
-    setTimeout(()=>{ closeUpload(); loadSongs(); },700);
+    msg.className='msg ok'; msg.textContent='上传成功！共 '+groups.length+' 首';
+    setTimeout(()=>{ closeUpload(); loadSongs(); },800);
   }catch(e){ msg.className='msg err'; msg.textContent=e.message; }
   finally{ $('#upSubmit').disabled=false; }
+}
+
+/* 根据文件名把文件分组成曲子：
+   - 去扩展名、去末尾数字 → 曲名；同名归为一首的多页，组内按数字升序
+   - 无数字后缀的各自成一首单页
+   - 每个 PDF 各自成一首（多页由 pdf.js 处理） */
+function baseName(fn){ return fn.replace(/\.[^.]+$/,''); }   // 去扩展名
+function songKey(fn){
+  // 去掉末尾的数字（含全角/半角）和可能的分隔符，如「无羁1」「无羁-2」「无羁 第3页」→「无羁」
+  return baseName(fn).replace(/[\s_\-]*第?\s*[0-9０-９]+\s*页?$/,'').trim() || baseName(fn);
+}
+function pageNum(fn){
+  const m=baseName(fn).match(/([0-9０-９]+)\s*页?$/);
+  if(!m) return 0;
+  return parseInt(m[1].replace(/[０-９]/g,d=>'0123456789'['０１２３４５６７８９'.indexOf(d)]),10)||0;
+}
+function groupFiles(files){
+  const pdfs=files.filter(f=>/\.pdf$/i.test(f.name));
+  const imgs=files.filter(f=>!/\.pdf$/i.test(f.name));
+  const groups=[];
+  // PDF：各自一首
+  for(const f of pdfs){ groups.push({ title:songKey(f.name), kind:'pdf', files:[f] }); }
+  // 图片：按 songKey 分组
+  const map=new Map();
+  for(const f of imgs){
+    const k=songKey(f.name);
+    if(!map.has(k)) map.set(k,[]);
+    map.get(k).push(f);
+  }
+  for(const [k,fs] of map){
+    fs.sort((a,b)=>{ const d=pageNum(a.name)-pageNum(b.name); return d!==0?d:a.name.localeCompare(b.name,'zh'); });
+    groups.push({ title:k, kind:'image', files:fs });
+  }
+  groups.sort((a,b)=>a.title.localeCompare(b.title,'zh'));
+  return groups;
+}
+
+/* 选文件后实时预览识别结果 */
+function refreshPreview(){
+  const files=[...$('#upFiles').files];
+  const prev=$('#upPreview'), renameWrap=$('#upRenameWrap');
+  if(files.length===0){ prev.style.display='none'; renameWrap.style.display='none'; return; }
+  let groups;
+  try{ groups=groupFiles(files); }
+  catch(e){ prev.style.display='block'; prev.textContent=e.message; return; }
+  renameWrap.style.display = groups.length===1 ? 'block' : 'none';
+  if(groups.length===1){ $('#upTitle').value=''; $('#upTitle').placeholder='识别为「'+groups[0].title+'」，可改'; }
+  prev.style.display='block';
+  prev.innerHTML='识别到 <b>'+groups.length+'</b> 首：<br>'+
+    groups.map(g=>'· <b>'+escapeHtml(g.title)+'</b>（'+(g.kind==='pdf'?'PDF 多页':g.files.length+' 页')+'）').join('<br>');
 }
 async function deleteSong(song){
   if(!isAdmin()) return;
@@ -295,7 +358,7 @@ async function deleteSong(song){
 /* ---------- Modal 开关 ---------- */
 function openLogin(){ $('#loginEmail').value=''; $('#loginPass').value=''; $('#loginErr').textContent=''; $('#loginOverlay').classList.add('on'); setTimeout(()=>$('#loginEmail').focus(),50); }
 function closeLogin(){ $('#loginOverlay').classList.remove('on'); }
-function openUpload(){ $('#upTitle').value=''; $('#upTags').value=''; $('#upFiles').value=''; $('#upMsg').textContent=''; $('#uploadOverlay').classList.add('on'); }
+function openUpload(){ $('#upTitle').value=''; $('#upTags').value=''; $('#upFiles').value=''; $('#upMsg').textContent=''; $('#upPreview').style.display='none'; $('#upRenameWrap').style.display='none'; $('#uploadOverlay').classList.add('on'); }
 function closeUpload(){ $('#uploadOverlay').classList.remove('on'); }
 async function doLogin(){
   const email=$('#loginEmail').value.trim(), pass=$('#loginPass').value;
@@ -318,6 +381,7 @@ $('#loginOverlay').addEventListener('click', e=>{ if(e.target.id==='loginOverlay
 $('#loginPass').addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });
 $('#logoutBtn').addEventListener('click', e=>{ e.preventDefault(); setSession(null); applyAdminUI(); });
 $('#uploadBtn').addEventListener('click', openUpload);
+$('#upFiles').addEventListener('change', refreshPreview);
 $('#upCancel').addEventListener('click', closeUpload);
 $('#upSubmit').addEventListener('click', doUpload);
 $('#uploadOverlay').addEventListener('click', e=>{ if(e.target.id==='uploadOverlay') closeUpload(); });
