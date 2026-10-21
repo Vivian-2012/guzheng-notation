@@ -91,6 +91,7 @@
 <div class="reader" id="reader">
   <div class="rhead">
     <div class="title" id="rTitle"></div>
+    <button id="rFull">⛶ 全屏</button>
     <button id="rClose">✕ 关闭</button>
   </div>
   <div class="rstage" id="rStage">
@@ -213,14 +214,30 @@ function filter(){
 
 /* ---------- Reader ---------- */
 let R={ song:null, mode:null, page:1, total:1, pdf:null };
+function enterFullscreen(){
+  const el=$('#reader');
+  const fn=el.requestFullscreen||el.webkitRequestFullscreen||el.msRequestFullscreen;
+  if(fn){ try{ fn.call(el); }catch(e){} }
+}
+function exitFullscreen(){
+  if(document.fullscreenElement||document.webkitFullscreenElement){
+    const fn=document.exitFullscreen||document.webkitExitFullscreen||document.msExitFullscreen;
+    if(fn){ try{ fn.call(document); }catch(e){} }
+  }
+}
+function toggleFullscreen(){
+  if(document.fullscreenElement||document.webkitFullscreenElement) exitFullscreen();
+  else enterFullscreen();
+}
 function openReader(song){
   R.song=song; R.page=1; R.pdf=null;
   $('#rTitle').textContent=song.title;
   $('#reader').classList.add('on'); document.body.style.overflow='hidden';
+  enterFullscreen();
   if(song.kind==='pdf'){ R.mode='pdf'; loadPdf(pubUrl(song.files[0])); }
   else { R.mode='img'; R.total=song.files.length; showImgPage(); }
 }
-function closeReader(){ $('#reader').classList.remove('on'); document.body.style.overflow=''; $('#rContent').innerHTML='<div class="loading">加载中…</div>'; R.pdf=null; }
+function closeReader(){ exitFullscreen(); $('#reader').classList.remove('on'); document.body.style.overflow=''; $('#rContent').innerHTML='<div class="loading">加载中…</div>'; R.pdf=null; }
 function showImgPage(){
   $('#rContent').innerHTML='';
   const img=document.createElement('img');
@@ -309,7 +326,7 @@ function runCurl(pageCanvas, snap, forward){
     cv.style.height=snap.height+'px';
     stage.appendChild(cv);
     const ctx=cv.getContext('2d');
-    const dur=520, start=performance.now();
+    const dur=240, start=performance.now();
     function frame(now){
       let t=(now-start)/dur; if(t>1)t=1;
       // ease-in-out
@@ -330,10 +347,14 @@ function runCurl(pageCanvas, snap, forward){
    - 底层露出的新页已经画在 rContent 里，这里只画旧页的残留与翻折片 */
 function drawCurl(ctx,img,W,H,p){
   ctx.clearRect(0,0,W,H);
-  const diag=Math.hypot(W,H);
-  // 卷起线参考点：从右下角(W,H)沿对角线(指向左上)前进 p*diag
-  const ux=-W/diag, uy=-H/diag;       // 对角线方向(右下→左上)，也是卷折的法线
-  const d=p*diag;
+  const diag=Math.hypot(W,H);  // 备用对角线长度
+  // 卷折法线方向：偏水平往左（略带上），让纸主要往左翻而不是往左上
+  const nx=-1, ny=-0.12;              // 越接近 (-1,0) 越水平
+  const nlen=Math.hypot(nx,ny);
+  const ux=nx/nlen, uy=ny/nlen;       // 单位法线(推进方向)
+  // 从右下角出发，沿此方向推进到完全覆盖页面左边
+  const total=(W+40)/(-ux);           // 走完整页宽所需距离(含余量)
+  const d=p*total;
   const cx=W+ux*d, cy=H+uy*d;
   const tx=-uy, ty=ux;                 // 卷起线方向(垂直法线)
 
@@ -541,6 +562,7 @@ async function doLogin(){
 /* ---------- 事件 ---------- */
 $('#q').addEventListener('input', filter);
 $('#rClose').addEventListener('click', closeReader);
+$('#rFull').addEventListener('click', toggleFullscreen);
 $('#tapL').addEventListener('click', ()=>go(-1));
 $('#tapR').addEventListener('click', ()=>go(1));
 $('#loginBtn').addEventListener('click', openLogin);
@@ -562,6 +584,10 @@ document.addEventListener('keydown', e=>{
   }
 });
 window.addEventListener('resize', ()=>{ if($('#reader').classList.contains('on')&&R.mode==='pdf') renderPdfPage(); });
+['fullscreenchange','webkitfullscreenchange'].forEach(ev=>document.addEventListener(ev,()=>{
+  const b=$('#rFull'); if(b) b.textContent=(document.fullscreenElement||document.webkitFullscreenElement)?'⛶ 退出全屏':'⛶ 全屏';
+  if($('#reader').classList.contains('on')&&R.mode==='pdf') setTimeout(renderPdfPage,100);
+}));
 
 /* ---------- 启动 ---------- */
 applyAdminUI();
