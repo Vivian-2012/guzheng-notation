@@ -309,7 +309,7 @@ function runCurl(pageCanvas, snap, forward){
     cv.style.height=snap.height+'px';
     stage.appendChild(cv);
     const ctx=cv.getContext('2d');
-    const dur=900, start=performance.now();
+    const dur=520, start=performance.now();
     function frame(now){
       let t=(now-start)/dur; if(t>1)t=1;
       // ease-in-out
@@ -351,7 +351,7 @@ function drawCurl(ctx,img,W,H,p){
   ctx.restore();
 
   // 2) 翻折片：右下侧的旧页，绕卷起线镜像翻到左上(模拟掀起的纸背)
-  const curl=Math.min(W,H)*0.5*Math.sin(Math.PI*Math.min(1,p*1.1));
+  const curl=Math.min(W,H)*0.22*Math.sin(Math.PI*Math.min(1,p*1.1));
   drawFoldFlap(ctx,img,W,H,cx,cy,ux,uy,tx,ty,curl);
 }
 
