@@ -141,6 +141,8 @@ const SESS_KEY='guzheng.session';
 
 function pubUrl(name){ return SB_URL+'/storage/v1/object/public/'+BUCKET+'/'+encodeURIComponent(name); }
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+// Storage key 只允许 ASCII：保留字母数字，其余去掉；中文名无 ASCII 时用 'score' 兜底
+function safeSlug(s){ const t=String(s).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,''); return t||'score'; }
 
 /* ---------- Auth（复刻参考站逻辑）---------- */
 function getSession(){ try{ return JSON.parse(localStorage.getItem(SESS_KEY)||'null'); }catch(e){ return null; } }
@@ -273,15 +275,15 @@ async function doUpload(){
   $('#upSubmit').disabled=true; msg.className='msg'; msg.textContent='上传中…';
   try{
     let done=0;
+    const stamp=Date.now();
     for(const g of groups){
       const names=[];
+      const slug=safeSlug(g.title);
       for(let i=0;i<g.files.length;i++){
         const f=g.files[i];
-        const ext=f.name.split('.').pop();
-        // 存储文件名：曲名 + 页码(多页时) + 扩展名，避免不同曲子重名
-        const dest=g.kind==='pdf'
-          ? (g.title+'.'+ext)
-          : (g.title+(g.files.length>1?(i+1):'')+'.'+ext);
+        const ext=(f.name.split('.').pop()||'bin').toLowerCase();
+        // Storage key 必须是 ASCII：用 slug + 时间戳 + 页码，避免中文导致 InvalidKey
+        const dest=slug+'-'+stamp+'-'+(done+1)+(g.files.length>1?('p'+(i+1)):'')+'.'+ext;
         await uploadOne(f,dest); names.push(dest);
       }
       await insertSong(g.title,tags,names,g.kind);
