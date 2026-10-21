@@ -41,6 +41,10 @@
   .rhead button:hover{background:#4a4843}
   .rstage{position:relative;flex:1;overflow:auto;padding:16px}
   .rcontent{display:flex;align-items:flex-start;justify-content:center;min-height:100%}
+  .rcontent.slide-next{animation:slideNext .28s ease}
+  .rcontent.slide-prev{animation:slidePrev .28s ease}
+  @keyframes slideNext{from{opacity:.2;transform:translateX(40px)}to{opacity:1;transform:translateX(0)}}
+  @keyframes slidePrev{from{opacity:.2;transform:translateX(-40px)}to{opacity:1;transform:translateX(0)}}
   .rstage img,.rstage canvas{max-width:100%;height:auto;background:#fff;border-radius:6px;box-shadow:0 6px 24px rgba(0,0,0,.4)}
   /* 左右点击翻页区（覆盖在舞台上方，固定在视口） */
   .tap{position:fixed;top:56px;bottom:0;width:38%;z-index:3;cursor:pointer;-webkit-tap-highlight-color:transparent}
@@ -66,7 +70,8 @@
 <div class="wrap">
   <div class="topbar">
     <button class="btn ghost sm" id="loginBtn">🔐 管理员登录</button>
-    <span id="adminInfo" style="display:none;color:var(--accent-d)">
+    <span id="adminInfo" style="display:none;align-items:center;color:var(--accent-d)">
+      <span style="margin-right:10px">👤 <span id="adminWho"></span></span>
       <button class="btn sm" id="uploadBtn">＋ 上传谱子</button>
       <a href="#" id="logoutBtn" style="color:var(--muted);margin-left:8px">退出</a>
     </span>
@@ -158,7 +163,10 @@ async function authLogin(email,password){
 }
 function applyAdminUI(){
   const info=$('#adminInfo'), btn=$('#loginBtn');
-  if(isAdmin()){ info.style.display='inline-flex'; btn.style.display='none'; document.body.classList.add('admin'); }
+  if(isAdmin()){
+    info.style.display='inline-flex'; btn.style.display='none'; document.body.classList.add('admin');
+    const s=getSession(); $('#adminWho').textContent=(s&&s.email)?s.email:'admin';
+  }
   else { info.style.display='none'; btn.style.display='inline-flex'; document.body.classList.remove('admin'); }
 }
 
@@ -219,7 +227,7 @@ function showImgPage(){
   $('#rContent').innerHTML='';
   const img=document.createElement('img');
   img.src=pubUrl(R.song.files[R.page-1]); img.alt=R.song.title+' 第'+R.page+'页';
-  $('#rContent').appendChild(img); updateNav();
+  $('#rContent').appendChild(img); updateNav(); playSlide();
 }
 async function loadPdf(url){
   $('#rContent').innerHTML='<div class="loading">加载 PDF 中…</div>';
@@ -238,7 +246,7 @@ async function renderPdfPage(){
   canvas.width=vp.width; canvas.height=vp.height; canvas.style.width=(vp.width/1.5)+'px';
   $('#rContent').innerHTML=''; $('#rContent').appendChild(canvas);
   await page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;
-  updateNav();
+  updateNav(); playSlide();
 }
 let hintTimer=null;
 function updateNav(){
@@ -248,7 +256,17 @@ function updateNav(){
   clearTimeout(hintTimer);
   hintTimer=setTimeout(()=>{ hint.style.opacity='0'; },1400);
 }
-function go(d){ const np=R.page+d; if(np<1||np>R.total) return; R.page=np; $('#rStage').scrollTop=0; R.mode==='img'?showImgPage():renderPdfPage(); }
+// 根据 R.dir 播放左/右滑入动画
+function playSlide(){
+  if(!R.dir) return;
+  const el=$('#rContent');
+  const cls=R.dir>0?'slide-next':'slide-prev';
+  el.classList.remove('slide-next','slide-prev');
+  void el.offsetWidth; // 重排以重启动画
+  el.classList.add(cls);
+  R.dir=0;
+}
+function go(d){ const np=R.page+d; if(np<1||np>R.total) return; R.page=np; R.dir=d; $('#rStage').scrollTop=0; R.mode==='img'?showImgPage():renderPdfPage(); }
 
 /* ---------- 上传 ---------- */
 async function uploadOne(file, destName){
