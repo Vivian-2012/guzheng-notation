@@ -39,9 +39,9 @@
   .rhead .title{font-size:16px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .rhead button{background:#3b3a36;color:#f3eee5;border:none;border-radius:10px;padding:8px 12px;font-size:14px;cursor:pointer}
   .rhead button:hover{background:#4a4843}
-  .rstage{position:relative;flex:1;overflow:auto;padding:16px}
-  .rcontent{display:flex;align-items:flex-start;justify-content:center;min-height:100%}
-  .rstage img,.rstage canvas{max-width:100%;height:auto;background:#fff;border-radius:4px;box-shadow:0 6px 24px rgba(0,0,0,.4)}
+  .rstage{position:relative;flex:1;overflow:auto;padding:12px}
+  .rcontent{display:flex;align-items:center;justify-content:center;width:100%;height:100%}
+  .rstage img,.rstage canvas{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;background:#fff;border-radius:4px;box-shadow:0 6px 24px rgba(0,0,0,.4)}
   /* 卷页动画用的覆盖 canvas */
   #flipCanvas{position:absolute;z-index:6;pointer-events:none;border-radius:4px}
   /* 左右点击翻页区（覆盖在舞台上方，固定在视口） */
@@ -62,6 +62,9 @@
   .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:8px}
   .msg{font-size:13px;min-height:18px}
   .msg.err{color:var(--red)} .msg.ok{color:var(--accent-d)}
+  .dropzone{display:flex;align-items:center;justify-content:center;text-align:center;min-height:84px;padding:14px;border:2px dashed var(--line);border-radius:12px;cursor:pointer;color:var(--muted);font-size:14px;transition:.15s;background:#faf8f4}
+  .dropzone:hover{border-color:var(--accent);color:var(--accent-d)}
+  .dropzone.drag{border-color:var(--accent);background:#f3e9e0;color:var(--accent-d)}
 </style>
 </head>
 <body>
@@ -120,7 +123,13 @@
 <div class="overlay" id="uploadOverlay">
   <div class="modal">
     <h2>上传谱子</h2>
-    <div class="field"><label>谱子文件（PDF 或图片，可多选；同名不同数字=同一首的多页）</label><input type="file" id="upFiles" accept=".pdf,.jpg,.jpeg,.png" multiple></div>
+    <div class="field">
+      <label>谱子文件（PDF 或图片，可多选；同名不同数字=同一首的多页）</label>
+      <label id="dropZone" class="dropzone">
+        <input type="file" id="upFiles" accept=".pdf,.jpg,.jpeg,.png" multiple hidden>
+        <span class="dz-text">点击选择，或把文件拖到这里</span>
+      </label>
+    </div>
     <div class="field"><label>标签（逗号分隔，可留空；应用于本次所有曲子）</label><input type="text" id="upTags" placeholder="古风, 抒情"></div>
     <div class="field" id="upRenameWrap" style="display:none"><label>曲名（仅识别到 1 首时可改，留空用文件名）</label><input type="text" id="upTitle" placeholder="留空则用文件名自动识别"></div>
     <div id="upPreview" style="font-size:13px;color:var(--muted);background:#faf7f1;border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:12px;display:none"></div>
@@ -259,7 +268,7 @@ async function renderPdfPage(){
   const scale=Math.max(1,(stageW/base.width))*1.5;
   const vp=page.getViewport({scale});
   const canvas=document.createElement('canvas');
-  canvas.width=vp.width; canvas.height=vp.height; canvas.style.width=(vp.width/1.5)+'px';
+  canvas.width=vp.width; canvas.height=vp.height;
   $('#rContent').innerHTML=''; $('#rContent').appendChild(canvas);
   await page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;
   updateNav();
@@ -522,7 +531,8 @@ function groupFiles(files){
 /* 选文件后实时预览识别结果 */
 function refreshPreview(){
   const files=[...$('#upFiles').files];
-  const prev=$('#upPreview'), renameWrap=$('#upRenameWrap');
+  const prev=$('#upPreview'), renameWrap=$('#upRenameWrap'), dzText=document.querySelector('#dropZone .dz-text');
+  if(dzText) dzText.textContent = files.length ? ('已选 '+files.length+' 个文件（点此可重选）') : '点击选择，或把文件拖到这里';
   if(files.length===0){ prev.style.display='none'; renameWrap.style.display='none'; return; }
   let groups;
   try{ groups=groupFiles(files); }
@@ -548,7 +558,7 @@ async function deleteSong(song){
 /* ---------- Modal 开关 ---------- */
 function openLogin(){ $('#loginEmail').value=''; $('#loginPass').value=''; $('#loginErr').textContent=''; $('#loginOverlay').classList.add('on'); setTimeout(()=>$('#loginEmail').focus(),50); }
 function closeLogin(){ $('#loginOverlay').classList.remove('on'); }
-function openUpload(){ $('#upTitle').value=''; $('#upTags').value=''; $('#upFiles').value=''; $('#upMsg').textContent=''; $('#upPreview').style.display='none'; $('#upRenameWrap').style.display='none'; $('#uploadOverlay').classList.add('on'); }
+function openUpload(){ $('#upTitle').value=''; $('#upTags').value=''; $('#upFiles').value=''; $('#upMsg').textContent=''; $('#upPreview').style.display='none'; $('#upRenameWrap').style.display='none'; const dz=document.querySelector('#dropZone .dz-text'); if(dz) dz.textContent='点击选择，或把文件拖到这里'; $('#uploadOverlay').classList.add('on'); }
 function closeUpload(){ $('#uploadOverlay').classList.remove('on'); }
 async function doLogin(){
   const email=$('#loginEmail').value.trim(), pass=$('#loginPass').value;
@@ -573,6 +583,24 @@ $('#loginPass').addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); 
 $('#logoutBtn').addEventListener('click', e=>{ e.preventDefault(); setSession(null); applyAdminUI(); });
 $('#uploadBtn').addEventListener('click', openUpload);
 $('#upFiles').addEventListener('change', refreshPreview);
+(function setupDrop(){
+  const dz=$('#dropZone'), input=$('#upFiles');
+  if(!dz) return;
+  ['dragenter','dragover'].forEach(ev=>dz.addEventListener(ev,e=>{ e.preventDefault(); e.stopPropagation(); dz.classList.add('drag'); }));
+  ['dragleave','dragend'].forEach(ev=>dz.addEventListener(ev,e=>{ e.preventDefault(); e.stopPropagation(); dz.classList.remove('drag'); }));
+  dz.addEventListener('drop',e=>{
+    e.preventDefault(); e.stopPropagation(); dz.classList.remove('drag');
+    const files=[...(e.dataTransfer&&e.dataTransfer.files||[])].filter(f=>/\.(pdf|jpe?g|png)$/i.test(f.name));
+    if(files.length===0) return;
+    // 把拖拽文件写进 input.files，让后续逻辑统一从 input 读取
+    try{
+      const dt=new DataTransfer();
+      files.forEach(f=>dt.items.add(f));
+      input.files=dt.files;
+    }catch(err){ /* 个别浏览器不支持写 input.files */ }
+    refreshPreview();
+  });
+})();
 $('#upCancel').addEventListener('click', closeUpload);
 $('#upSubmit').addEventListener('click', doUpload);
 $('#uploadOverlay').addEventListener('click', e=>{ if(e.target.id==='uploadOverlay') closeUpload(); });
