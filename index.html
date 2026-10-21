@@ -5,30 +5,37 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>古筝简谱库 · 搜索查谱</title>
 <style>
-  :root{--bg:#f6f4ef;--card:#fff;--ink:#2a2420;--muted:#8a8178;--line:#e7e1d6;--accent:#b4622f;--accent-d:#8f4a21;--gold:#c99a4a}
+  :root{--bg:#f6f4ef;--card:#fff;--ink:#2a2420;--muted:#8a8178;--line:#e7e1d6;--accent:#b4622f;--accent-d:#8f4a21;--gold:#c99a4a;--red:#dc2626}
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--ink);line-height:1.55;min-height:100vh}
-  .wrap{max-width:760px;margin:0 auto;padding:24px 16px 48px}
-  .brand{text-align:center;margin-bottom:22px}
+  .wrap{max-width:760px;margin:0 auto;padding:18px 16px 48px}
+  .topbar{display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-bottom:6px;font-size:13px}
+  .brand{text-align:center;margin-bottom:18px}
   .brand h1{font-size:25px;letter-spacing:1px}
   .brand p{color:var(--muted);font-size:14px;margin-top:4px}
-  .searchbar{position:sticky;top:0;z-index:5;background:var(--bg);padding:10px 0 14px}
+  .btn{font-size:14px;font-weight:600;padding:9px 16px;border:none;border-radius:10px;cursor:pointer;background:var(--accent);color:#fff}
+  .btn:hover{background:var(--accent-d)}
+  .btn.ghost{background:#fff;border:1px solid var(--line);color:var(--ink)}
+  .btn.sm{padding:6px 12px;font-size:13px}
+  .searchbar{position:sticky;top:0;z-index:5;background:var(--bg);padding:10px 0 10px}
   .searchbar input{width:100%;font-size:16px;padding:13px 16px;border:1px solid var(--line);border-radius:14px;outline:none;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.04)}
   .searchbar input:focus{border-color:var(--accent)}
   .count{color:var(--muted);font-size:13px;margin:2px 2px 12px}
   .list{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
-  .song{display:flex;flex-direction:column;text-align:left;cursor:pointer;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,.04);transition:.15s}
+  .song{position:relative;display:flex;flex-direction:column;text-align:left;cursor:pointer;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,.04);transition:.15s}
   .song:hover{transform:translateY(-3px);box-shadow:0 8px 22px rgba(0,0,0,.08);border-color:var(--accent)}
-  .song h2{font-size:18px;margin-bottom:8px}
+  .song h2{font-size:18px;margin-bottom:8px;padding-right:22px}
   .song .meta{color:var(--muted);font-size:12px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
   .tag{background:#f1ebe0;color:var(--accent-d);border-radius:20px;padding:2px 9px;font-size:11px}
   .pages-badge{margin-left:auto;color:var(--muted);font-size:12px}
+  .del{position:absolute;top:10px;right:10px;border:none;background:transparent;color:#c0392b;font-size:15px;cursor:pointer;display:none}
+  .admin .del{display:block}
   .empty{text-align:center;color:var(--muted);padding:40px 0}
   .foot{text-align:center;color:var(--muted);font-size:12px;margin-top:30px}
   /* reader */
   .reader{position:fixed;inset:0;background:#20201e;display:none;flex-direction:column;z-index:50}
   .reader.on{display:flex}
-  .rhead{display:flex;align-items:center;gap:12px;padding:12px 16px;background:#2b2a27;color:#f3eee5;box-shadow:0 1px 6px rgba(0,0,0,.3)}
+  .rhead{display:flex;align-items:center;gap:12px;padding:12px 16px;background:#2b2a27;color:#f3eee5}
   .rhead .title{font-size:16px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .rhead button{background:#3b3a36;color:#f3eee5;border:none;border-radius:10px;padding:8px 12px;font-size:14px;cursor:pointer}
   .rhead button:hover{background:#4a4843}
@@ -40,10 +47,29 @@
   .rnav button:disabled{opacity:.35;cursor:not-allowed}
   .rnav .pageinfo{font-size:15px;min-width:70px;text-align:center}
   .loading{color:#f3eee5;padding:40px;font-size:15px}
+  /* overlay/modal */
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;align-items:flex-start;justify-content:center;padding:24px;z-index:60}
+  .overlay.on{display:flex}
+  .modal{background:#fff;border-radius:16px;width:100%;max-width:420px;padding:20px}
+  .modal h2{font-size:17px;margin-bottom:12px}
+  .field{margin-bottom:12px}
+  .field label{display:block;font-size:13px;color:var(--muted);margin-bottom:4px}
+  .field input{width:100%;font-size:16px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;outline:none}
+  .field input:focus{border-color:var(--accent)}
+  .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:8px}
+  .msg{font-size:13px;min-height:18px}
+  .msg.err{color:var(--red)} .msg.ok{color:var(--accent-d)}
 </style>
 </head>
 <body>
 <div class="wrap">
+  <div class="topbar">
+    <button class="btn ghost sm" id="loginBtn">🔐 管理员登录</button>
+    <span id="adminInfo" style="display:none;color:var(--accent-d)">
+      <button class="btn sm" id="uploadBtn">＋ 上传谱子</button>
+      <a href="#" id="logoutBtn" style="color:var(--muted);margin-left:8px">退出</a>
+    </span>
+  </div>
   <div class="brand">
     <h1>🎍 古筝简谱库</h1>
     <p>输入曲名搜索 · 点开翻页查看简谱</p>
@@ -63,13 +89,40 @@
     <div class="title" id="rTitle"></div>
     <button id="rClose">✕ 关闭</button>
   </div>
-  <div class="rstage" id="rStage">
-    <div class="loading" id="rLoading">加载中…</div>
-  </div>
+  <div class="rstage" id="rStage"><div class="loading">加载中…</div></div>
   <div class="rnav">
     <button id="rPrev">‹ 上一页</button>
     <span class="pageinfo" id="rPageInfo">1 / 1</span>
     <button id="rNext">下一页 ›</button>
+  </div>
+</div>
+
+<!-- LOGIN MODAL -->
+<div class="overlay" id="loginOverlay">
+  <div class="modal">
+    <h2>管理员登录</h2>
+    <div class="field"><label>邮箱</label><input type="email" id="loginEmail" autocomplete="username" placeholder="you@example.com"></div>
+    <div class="field"><label>密码</label><input type="password" id="loginPass" autocomplete="current-password" placeholder="密码"></div>
+    <div id="loginErr" class="msg err"></div>
+    <div class="modal-actions">
+      <button class="btn ghost" id="loginCancel">取消</button>
+      <button class="btn" id="loginSubmit">登录</button>
+    </div>
+  </div>
+</div>
+
+<!-- UPLOAD MODAL -->
+<div class="overlay" id="uploadOverlay">
+  <div class="modal">
+    <h2>上传谱子</h2>
+    <div class="field"><label>曲名</label><input type="text" id="upTitle" placeholder="如：女人花"></div>
+    <div class="field"><label>标签（逗号分隔，可留空）</label><input type="text" id="upTags" placeholder="古风, 抒情"></div>
+    <div class="field"><label>谱子文件（PDF 或图片，可多选=多页）</label><input type="file" id="upFiles" accept=".pdf,.jpg,.jpeg,.png" multiple></div>
+    <div id="upMsg" class="msg"></div>
+    <div class="modal-actions">
+      <button class="btn ghost" id="upCancel">取消</button>
+      <button class="btn" id="upSubmit">上传</button>
+    </div>
   </div>
 </div>
 
@@ -78,14 +131,49 @@
 const $=s=>document.querySelector(s);
 if(window.pdfjsLib){ pdfjsLib.GlobalWorkerOptions.workerSrc='vendor/pdf.worker.min.js'; }
 
+/* ====== Supabase 配置（新项目建好后填这两项）====== */
+const SB_URL='https://ingpkdlpqyfhprsfkqlg.supabase.co';
+const SB_KEY='sb_publishable_tPzts1uKcT1drEN6c4tUWw_2jL150vD';
+const BUCKET='guzheng-scores';
+const SESS_KEY='guzheng.session';
+/* =================================================== */
+
+function pubUrl(name){ return SB_URL+'/storage/v1/object/public/'+BUCKET+'/'+encodeURIComponent(name); }
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+/* ---------- Auth（复刻参考站逻辑）---------- */
+function getSession(){ try{ return JSON.parse(localStorage.getItem(SESS_KEY)||'null'); }catch(e){ return null; } }
+function setSession(s){ s?localStorage.setItem(SESS_KEY,JSON.stringify(s)):localStorage.removeItem(SESS_KEY); }
+function isAdmin(){ const s=getSession(); return !!(s&&s.access_token); }
+function token(){ const s=getSession(); return s?s.access_token:null; }
+async function authLogin(email,password){
+  const r=await fetch(SB_URL+'/auth/v1/token?grant_type=password',{method:'POST',headers:{'apikey':SB_KEY,'Content-Type':'application/json'},body:JSON.stringify({email,password})});
+  const d=await r.json();
+  if(!r.ok||!d.access_token) throw new Error(d.error_description||d.msg||d.error||'登录失败');
+  setSession({access_token:d.access_token,refresh_token:d.refresh_token,expires_at:d.expires_at,email:(d.user&&d.user.email)||email});
+}
+function applyAdminUI(){
+  const info=$('#adminInfo'), btn=$('#loginBtn');
+  if(isAdmin()){ info.style.display='inline-flex'; btn.style.display='none'; document.body.classList.add('admin'); }
+  else { info.style.display='none'; btn.style.display='inline-flex'; document.body.classList.remove('admin'); }
+}
+
+/* ---------- 读曲库 ---------- */
 let SONGS=[];
 const listEl=$('#list'), emptyEl=$('#empty'), countEl=$('#count');
 
-function isPdf(f){ return /\.pdf$/i.test(f); }
-
-function pageCountOf(song){
-  // 图片类：文件数即页数；PDF：单文件但可能多页，先显示文件数（打开后再细化）
-  return song.files.length;
+async function loadSongs(){
+  try{
+    const r=await fetch(SB_URL+'/rest/v1/scores?select=*&order=title',{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+(token()||SB_KEY)}});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const rows=await r.json();
+    SONGS=rows.map(r=>({ id:r.id, title:r.title, tags:r.tags||[], files:r.files||[], kind:r.kind||(/(pdf)$/i.test((r.files||[])[0]||'')?'pdf':'image') }));
+    SONGS.sort((a,b)=>a.title.localeCompare(b.title,'zh'));
+    $('#total').textContent=SONGS.length;
+    render(SONGS);
+  }catch(e){
+    listEl.innerHTML='<div class="empty">曲库加载失败：'+escapeHtml(e.message)+'<br><small>请确认已填好 Supabase 配置并建好 scores 表</small></div>';
+  }
 }
 
 function render(items){
@@ -96,129 +184,155 @@ function render(items){
   items.forEach(song=>{
     const card=document.createElement('div');
     card.className='song';
-    const tags=(song.tags||[]).map(t=>'<span class="tag">'+t+'</span>').join('');
-    const kind=isPdf(song.files[0])?'PDF':'图片';
-    card.innerHTML='<h2>'+escapeHtml(song.title)+'</h2>'+
-      '<div class="meta">'+tags+'<span class="pages-badge">'+kind+' · '+(isPdf(song.files[0])?'多页':song.files.length+' 页')+'</span></div>';
-    card.addEventListener('click',()=>openReader(song));
+    const tags=(song.tags||[]).map(t=>'<span class="tag">'+escapeHtml(t)+'</span>').join('');
+    const isPdf=song.kind==='pdf';
+    card.innerHTML='<button class="del" title="删除">🗑</button>'+
+      '<h2>'+escapeHtml(song.title)+'</h2>'+
+      '<div class="meta">'+tags+'<span class="pages-badge">'+(isPdf?'PDF · 多页':'图片 · '+song.files.length+' 页')+'</span></div>';
+    card.addEventListener('click',e=>{ if(e.target.classList.contains('del')) return; openReader(song); });
+    card.querySelector('.del').addEventListener('click',e=>{ e.stopPropagation(); deleteSong(song); });
     listEl.appendChild(card);
   });
 }
 
-function escapeHtml(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-
 function filter(){
   const q=$('#q').value.trim().toLowerCase();
   if(!q){ render(SONGS); return; }
-  const res=SONGS.filter(s=>{
-    if(s.title.toLowerCase().includes(q)) return true;
-    return (s.tags||[]).some(t=>t.toLowerCase().includes(q));
-  });
-  render(res);
+  render(SONGS.filter(s=> s.title.toLowerCase().includes(q) || (s.tags||[]).some(t=>t.toLowerCase().includes(q)) ));
 }
 
 /* ---------- Reader ---------- */
 let R={ song:null, mode:null, page:1, total:1, pdf:null };
-
 function openReader(song){
   R.song=song; R.page=1; R.pdf=null;
   $('#rTitle').textContent=song.title;
-  $('#reader').classList.add('on');
-  document.body.style.overflow='hidden';
-  if(isPdf(song.files[0])){
-    R.mode='pdf';
-    loadPdf(song.files[0]);
-  } else {
-    R.mode='img';
-    R.total=song.files.length;
-    showImgPage();
-  }
+  $('#reader').classList.add('on'); document.body.style.overflow='hidden';
+  if(song.kind==='pdf'){ R.mode='pdf'; loadPdf(pubUrl(song.files[0])); }
+  else { R.mode='img'; R.total=song.files.length; showImgPage(); }
 }
-
-function closeReader(){
-  $('#reader').classList.remove('on');
-  document.body.style.overflow='';
-  $('#rStage').innerHTML='<div class="loading" id="rLoading">加载中…</div>';
-  R.pdf=null;
-}
-
+function closeReader(){ $('#reader').classList.remove('on'); document.body.style.overflow=''; $('#rStage').innerHTML='<div class="loading">加载中…</div>'; R.pdf=null; }
 function showImgPage(){
-  const f=R.song.files[R.page-1];
   $('#rStage').innerHTML='';
   const img=document.createElement('img');
-  img.src=f;
-  img.alt=R.song.title+' 第'+R.page+'页';
-  $('#rStage').appendChild(img);
-  updateNav();
+  img.src=pubUrl(R.song.files[R.page-1]); img.alt=R.song.title+' 第'+R.page+'页';
+  $('#rStage').appendChild(img); updateNav();
 }
-
 async function loadPdf(url){
   $('#rStage').innerHTML='<div class="loading">加载 PDF 中…</div>';
-  try{
-    const task=pdfjsLib.getDocument(url);
-    R.pdf=await task.promise;
-    R.total=R.pdf.numPages;
-    R.page=1;
-    renderPdfPage();
-  }catch(e){
-    $('#rStage').innerHTML='<div class="loading">PDF 加载失败：'+escapeHtml(e.message)+'</div>';
-  }
+  try{ R.pdf=await pdfjsLib.getDocument(url).promise; R.total=R.pdf.numPages; R.page=1; renderPdfPage(); }
+  catch(e){ $('#rStage').innerHTML='<div class="loading">PDF 加载失败：'+escapeHtml(e.message)+'</div>'; }
 }
-
 async function renderPdfPage(){
   if(!R.pdf) return;
   $('#rStage').innerHTML='<div class="loading">渲染中…</div>';
   const page=await R.pdf.getPage(R.page);
-  const stageW=Math.min($('#rStage').clientWidth-32, 1100);
+  const stageW=Math.min($('#rStage').clientWidth-32,1100);
   const base=page.getViewport({scale:1});
-  const scale=Math.max(1, (stageW/base.width))*1.5; // 清晰度
-  const viewport=page.getViewport({scale});
+  const scale=Math.max(1,(stageW/base.width))*1.5;
+  const vp=page.getViewport({scale});
   const canvas=document.createElement('canvas');
-  canvas.width=viewport.width; canvas.height=viewport.height;
-  canvas.style.width=(viewport.width/1.5)+'px';
-  const ctx=canvas.getContext('2d');
-  $('#rStage').innerHTML='';
-  $('#rStage').appendChild(canvas);
-  await page.render({canvasContext:ctx, viewport}).promise;
+  canvas.width=vp.width; canvas.height=vp.height; canvas.style.width=(vp.width/1.5)+'px';
+  $('#rStage').innerHTML=''; $('#rStage').appendChild(canvas);
+  await page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;
   updateNav();
 }
+function updateNav(){ $('#rPageInfo').textContent=R.page+' / '+R.total; $('#rPrev').disabled=R.page<=1; $('#rNext').disabled=R.page>=R.total; }
+function go(d){ const np=R.page+d; if(np<1||np>R.total) return; R.page=np; $('#rStage').scrollTop=0; R.mode==='img'?showImgPage():renderPdfPage(); }
 
-function updateNav(){
-  $('#rPageInfo').textContent=R.page+' / '+R.total;
-  $('#rPrev').disabled=R.page<=1;
-  $('#rNext').disabled=R.page>=R.total;
+/* ---------- 上传 ---------- */
+async function uploadOne(file, destName){
+  const r=await fetch(SB_URL+'/storage/v1/object/'+BUCKET+'/'+encodeURIComponent(destName),{
+    method:'POST',
+    headers:{'apikey':SB_KEY,'Authorization':'Bearer '+token(),'Content-Type':file.type||'application/octet-stream','x-upsert':'true'},
+    body:file
+  });
+  if(!r.ok){ const t=await r.text(); throw new Error('上传失败 '+destName+'：'+t); }
+}
+async function insertSong(title,tags,files,kind){
+  const r=await fetch(SB_URL+'/rest/v1/scores',{
+    method:'POST',
+    headers:{'apikey':SB_KEY,'Authorization':'Bearer '+token(),'Content-Type':'application/json','Prefer':'return=minimal'},
+    body:JSON.stringify({title,tags,files,kind})
+  });
+  if(!r.ok){ const t=await r.text(); throw new Error('写入曲库失败：'+t); }
+}
+async function doUpload(){
+  const title=$('#upTitle').value.trim();
+  const tags=$('#upTags').value.split(',').map(s=>s.trim()).filter(Boolean);
+  const files=[...$('#upFiles').files];
+  const msg=$('#upMsg'); msg.className='msg';
+  if(!title){ msg.className='msg err'; msg.textContent='请填曲名'; return; }
+  if(files.length===0){ msg.className='msg err'; msg.textContent='请选择文件'; return; }
+  const pdfCount=files.filter(f=>/\.pdf$/i.test(f.name)).length;
+  if(pdfCount>0 && files.length>1){ msg.className='msg err'; msg.textContent='PDF 请单独一个文件上传；多页请用多张图片'; return; }
+  const kind=pdfCount>0?'pdf':'image';
+  $('#upSubmit').disabled=true; msg.className='msg'; msg.textContent='上传中…';
+  try{
+    const names=[];
+    for(let i=0;i<files.length;i++){
+      const ext=files[i].name.split('.').pop();
+      const dest=kind==='pdf'?(title+'.'+ext):(title+(files.length>1?(i+1):'')+'.'+ext);
+      await uploadOne(files[i],dest); names.push(dest);
+    }
+    await insertSong(title,tags,names,kind);
+    msg.className='msg ok'; msg.textContent='上传成功！';
+    setTimeout(()=>{ closeUpload(); loadSongs(); },700);
+  }catch(e){ msg.className='msg err'; msg.textContent=e.message; }
+  finally{ $('#upSubmit').disabled=false; }
+}
+async function deleteSong(song){
+  if(!isAdmin()) return;
+  if(!confirm('删除《'+song.title+'》？文件也会从存储删除。')) return;
+  try{
+    for(const f of song.files){
+      await fetch(SB_URL+'/storage/v1/object/'+BUCKET+'/'+encodeURIComponent(f),{method:'DELETE',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+token()}});
+    }
+    await fetch(SB_URL+'/rest/v1/scores?id=eq.'+song.id,{method:'DELETE',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+token()}});
+    loadSongs();
+  }catch(e){ alert('删除失败：'+e.message); }
 }
 
-function go(delta){
-  const np=R.page+delta;
-  if(np<1||np>R.total) return;
-  R.page=np;
-  $('#rStage').scrollTop=0;
-  if(R.mode==='img') showImgPage();
-  else renderPdfPage();
+/* ---------- Modal 开关 ---------- */
+function openLogin(){ $('#loginEmail').value=''; $('#loginPass').value=''; $('#loginErr').textContent=''; $('#loginOverlay').classList.add('on'); setTimeout(()=>$('#loginEmail').focus(),50); }
+function closeLogin(){ $('#loginOverlay').classList.remove('on'); }
+function openUpload(){ $('#upTitle').value=''; $('#upTags').value=''; $('#upFiles').value=''; $('#upMsg').textContent=''; $('#uploadOverlay').classList.add('on'); }
+function closeUpload(){ $('#uploadOverlay').classList.remove('on'); }
+async function doLogin(){
+  const email=$('#loginEmail').value.trim(), pass=$('#loginPass').value;
+  if(!email||!pass){ $('#loginErr').textContent='请输入邮箱和密码'; return; }
+  $('#loginSubmit').disabled=true; $('#loginSubmit').textContent='登录中…';
+  try{ await authLogin(email,pass); closeLogin(); applyAdminUI(); loadSongs(); }
+  catch(e){ $('#loginErr').textContent='登录失败：'+e.message; }
+  finally{ $('#loginSubmit').disabled=false; $('#loginSubmit').textContent='登录'; }
 }
 
+/* ---------- 事件 ---------- */
+$('#q').addEventListener('input', filter);
 $('#rClose').addEventListener('click', closeReader);
 $('#rPrev').addEventListener('click', ()=>go(-1));
 $('#rNext').addEventListener('click', ()=>go(1));
+$('#loginBtn').addEventListener('click', openLogin);
+$('#loginSubmit').addEventListener('click', doLogin);
+$('#loginCancel').addEventListener('click', closeLogin);
+$('#loginOverlay').addEventListener('click', e=>{ if(e.target.id==='loginOverlay') closeLogin(); });
+$('#loginPass').addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });
+$('#logoutBtn').addEventListener('click', e=>{ e.preventDefault(); setSession(null); applyAdminUI(); });
+$('#uploadBtn').addEventListener('click', openUpload);
+$('#upCancel').addEventListener('click', closeUpload);
+$('#upSubmit').addEventListener('click', doUpload);
+$('#uploadOverlay').addEventListener('click', e=>{ if(e.target.id==='uploadOverlay') closeUpload(); });
 document.addEventListener('keydown', e=>{
-  if(!$('#reader').classList.contains('on')) return;
-  if(e.key==='Escape') closeReader();
-  else if(e.key==='ArrowLeft') go(-1);
-  else if(e.key==='ArrowRight') go(1);
+  if($('#reader').classList.contains('on')){
+    if(e.key==='Escape') closeReader();
+    else if(e.key==='ArrowLeft') go(-1);
+    else if(e.key==='ArrowRight') go(1);
+  }
 });
-window.addEventListener('resize', ()=>{ if($('#reader').classList.contains('on') && R.mode==='pdf') renderPdfPage(); });
+window.addEventListener('resize', ()=>{ if($('#reader').classList.contains('on')&&R.mode==='pdf') renderPdfPage(); });
 
-$('#q').addEventListener('input', filter);
-
-/* ---------- Load data ---------- */
-fetch('songs.json').then(r=>r.json()).then(d=>{
-  SONGS=(d.songs||[]).sort((a,b)=>a.title.localeCompare(b.title,'zh'));
-  $('#total').textContent=SONGS.length;
-  render(SONGS);
-}).catch(e=>{
-  listEl.innerHTML='<div class="empty">曲库加载失败：'+escapeHtml(e.message)+'</div>';
-});
+/* ---------- 启动 ---------- */
+applyAdminUI();
+loadSongs();
 </script>
 </body>
 </html>

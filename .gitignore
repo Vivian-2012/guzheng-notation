@@ -1,1 +1,5 @@
 .DS_Store
+# 谱子源文件已托管在 Supabase Storage，不进 git（本地保留用于导入）
+scores/
+# 旧的本地曲库（已迁移到 Supabase scores 表）
+songs.json
