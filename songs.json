@@ -1,0 +1,50 @@
+{
+  "songs": [
+    {
+      "title": "你笑起来真好看",
+      "tags": ["流行", "轻快"],
+      "files": ["scores/你笑起来真好看.pdf"]
+    },
+    {
+      "title": "刀剑如梦",
+      "tags": ["影视", "古风"],
+      "files": ["scores/刀剑如梦.pdf"]
+    },
+    {
+      "title": "女人花",
+      "tags": ["经典", "抒情"],
+      "files": ["scores/女人花.jpg"]
+    },
+    {
+      "title": "醉清波",
+      "tags": ["古风"],
+      "files": ["scores/醉清波.jpg"]
+    },
+    {
+      "title": "无羁",
+      "tags": ["影视", "古风", "陈情令"],
+      "files": [
+        "scores/无羁1.png",
+        "scores/无羁2.png",
+        "scores/无羁3.png",
+        "scores/无羁4.png"
+      ]
+    },
+    {
+      "title": "琵琶语",
+      "tags": ["古风", "抒情"],
+      "files": [
+        "scores/琵琶语1.jpg",
+        "scores/琵琶语2.jpg"
+      ]
+    },
+    {
+      "title": "又见炊烟",
+      "tags": ["经典", "抒情"],
+      "files": [
+        "scores/又见炊烟1.jpg",
+        "scores/又见炊烟2.jpg"
+      ]
+    }
+  ]
+}
