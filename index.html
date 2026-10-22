@@ -96,6 +96,7 @@
 <div class="reader" id="reader">
   <div class="rhead">
     <div class="title" id="rTitle"></div>
+    <button id="rRotate" title="旋转90°">↻ 旋转</button>
     <button id="rFull">⛶ 全屏</button>
     <button id="rClose">✕ 关闭</button>
   </div>
@@ -243,7 +244,7 @@ function toggleFullscreen(){
   else enterFullscreen();
 }
 function openReader(song){
-  R.song=song; R.page=1; R.pdf=null; R.cache={}; R.loadId=0;
+  R.song=song; R.page=1; R.pdf=null; R.cache={}; R.loadId=0; R.rot=0;
   $('#rTitle').textContent=song.title;
   $('#reader').classList.add('on'); document.body.style.overflow='hidden';
   enterFullscreen();
@@ -290,6 +291,7 @@ async function showImgPage(){
   img.crossOrigin='anonymous';
   img.src=src; img.alt=R.song.title+' 第'+R.page+'页';
   $('#rContent').appendChild(img); updateNav();
+  if(img.complete) applyRotation(); else img.addEventListener('load',applyRotation,{once:true});
   preloadNextImg();
 }
 async function loadPdf(url){
@@ -314,6 +316,7 @@ async function renderPdfPage(){
   $('#rContent').innerHTML=''; $('#rContent').appendChild(canvas);
   await page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;
   updateNav();
+  applyRotation();
 }
 let hintTimer=null;
 function updateNav(){
@@ -322,6 +325,38 @@ function updateNav(){
   hint.style.opacity='1';
   clearTimeout(hintTimer);
   hintTimer=setTimeout(()=>{ hint.style.opacity='0'; },1400);
+}
+
+/* 旋转当前页：把内容 transform rotate，并缩放以完整贴合可视区 */
+function applyRotation(){
+  const el=$('#rContent').firstElementChild;
+  if(!el || (el.tagName!=='IMG' && el.tagName!=='CANVAS')) return;
+  const stage=$('#rStage');
+  // 可用区域（减去内边距）
+  const availW=stage.clientWidth-24, availH=stage.clientHeight-24;
+  // 内容的自然尺寸（旋转前）：用元素的实际渲染/位图尺寸
+  const natW = el.naturalWidth || el.width || el.clientWidth;
+  const natH = el.naturalHeight || el.height || el.clientHeight;
+  if(!natW||!natH){ // 图片可能还没加载完，加载后再调
+    if(el.tagName==='IMG'){ el.addEventListener('load',applyRotation,{once:true}); }
+    return;
+  }
+  const deg=R.rot||0;
+  // 旋转后占用的外接框尺寸
+  const rotated = (deg%180!==0);
+  const boxW = rotated ? natH : natW;
+  const boxH = rotated ? natW : natH;
+  // 缩放：让旋转后的框完整放进可用区
+  const scale = Math.min(availW/boxW, availH/boxH);
+  // 重置尺寸约束，改用 transform 统一处理缩放+旋转，并居中
+  el.style.maxWidth='none'; el.style.maxHeight='none';
+  el.style.width=natW+'px'; el.style.height=natH+'px';
+  el.style.transformOrigin='center center';
+  el.style.transform='rotate('+deg+'deg) scale('+scale+')';
+}
+function rotate90(){
+  R.rot=((R.rot||0)+90)%360;
+  applyRotation();
 }
 
 /* 翻页：极速直接切页。d>0 下一页 */
@@ -499,6 +534,7 @@ async function doLogin(){
 /* ---------- 事件 ---------- */
 $('#q').addEventListener('input', filter);
 $('#rClose').addEventListener('click', closeReader);
+$('#rRotate').addEventListener('click', rotate90);
 $('#rFull').addEventListener('click', toggleFullscreen);
 $('#tapL').addEventListener('click', ()=>go(-1));
 $('#tapR').addEventListener('click', ()=>go(1));
@@ -538,10 +574,14 @@ document.addEventListener('keydown', e=>{
     else if(e.key==='ArrowRight') go(1);
   }
 });
-window.addEventListener('resize', ()=>{ if($('#reader').classList.contains('on')&&R.mode==='pdf') renderPdfPage(); });
+window.addEventListener('resize', ()=>{
+  if(!$('#reader').classList.contains('on')) return;
+  if(R.mode==='pdf') renderPdfPage(); else applyRotation();
+});
 ['fullscreenchange','webkitfullscreenchange'].forEach(ev=>document.addEventListener(ev,()=>{
   const b=$('#rFull'); if(b) b.textContent=(document.fullscreenElement||document.webkitFullscreenElement)?'⛶ 退出全屏':'⛶ 全屏';
-  if($('#reader').classList.contains('on')&&R.mode==='pdf') setTimeout(renderPdfPage,100);
+  if(!$('#reader').classList.contains('on')) return;
+  if(R.mode==='pdf') setTimeout(renderPdfPage,100); else setTimeout(applyRotation,100);
 }));
 
 /* ---------- 启动 ---------- */
